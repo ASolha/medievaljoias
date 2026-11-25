@@ -25,6 +25,29 @@
   // Mesmos caracteres do módulo de Gravação do Sentinela (♥ U+2665, ∞ U+221E) + o coração vazado (♡ U+2661)
   const SIMBOLOS = [{ c: '♥', t: 'Coração' }, { c: '♡', t: 'Coração vazado' }, { c: '∞', t: 'Infinito' }];
   const MAX_ANEXOS = 3;
+  // Modelos que a Medieval trabalha
+  const MODELOS = [
+    '4mm', '4mm chanfrado', '4mm friso', '4mm reto',
+    '6mm', '6mm chanfrado', '6mm friso', '6mm reto', '6mm com friso prateado',
+    '8mm', '8mm chanfrado', '8mm friso', '8mm reto',
+    '10mm'
+  ];
+  const SEM_PEDRA = ['6mm com friso prateado']; // modelos que não têm versão com pedra
+  const temPedra = (a) => a.w === 'Fem.' && !!a.pedra;
+  // modelo atual e novo de uma aliança (no modo "um modelo para o par", vêm da troca)
+  const modeloDe = (t, a) => (t.modeloPorAlianca ? a.modelo : t.modelo) || '';
+  const modeloNovoDe = (t, a) => (t.tipos.includes('troca_modelo') ? ((t.modeloPorAlianca ? a.modeloNovo : t.modeloNovo) || '') : '');
+  function erroPedra(t, a) {
+    if (!temPedra(a)) return '';
+    const m = [modeloDe(t, a), modeloNovoDe(t, a)].find((x) => SEM_PEDRA.includes(x));
+    return m ? `O modelo ${m} não tem versão com pedra. Escolha outro modelo ou desmarque “Com pedra”.` : '';
+  }
+  const abrev = (a) => (a.w === 'Masc.' ? 'Masc.' : 'Fem.');
+  function resumoModelo(t, novo) {
+    const vals = t.aneis.map((a) => (novo ? modeloNovoDe(t, a) : modeloDe(t, a)));
+    if (vals.every((v) => v === vals[0])) return vals[0] || '';
+    return t.aneis.map((a, i) => `${abrev(a)} ${vals[i]}`).join(' / ').slice(0, 60);
+  }
   // Aros que a Medieval trabalha: sem pedra 10 a 35, com pedra 10 a 25 (só números inteiros)
   const ARO_MIN = 10, ARO_MAX = 35, ARO_MAX_PEDRA = 25;
   const faixaAro = (a) => (a.w === 'Fem.' && a.pedra ? [ARO_MIN, ARO_MAX_PEDRA] : [ARO_MIN, ARO_MAX]);
@@ -90,12 +113,14 @@
       aneis: (r.aneis || []).map((a) => ({
         w: a.identificacao === 'masculina' ? 'Masc.' : 'Fem.',
         de: a.aro_atual ?? null, para: a.aro_novo ?? null, pedra: !!a.pedra,
+        modelo: a.modelo_atual ?? r.modelo_atual ?? '', modeloNovo: a.modelo_novo ?? r.modelo_novo ?? '',
         gravs: (a.gravacoes || []).map((g) => ({
           local: g.local === 'externa' ? 'Externa' : 'Interna',
           texto: g.texto || '', fonte: g.fonte || 'Arial', outra: !FONTES.includes(g.fonte || 'Arial'),
           anexos: (g.anexos || []).map((x) => ({ id: x.path, path: x.path, nome: x.nome, tipo: x.tipo, tamanho: x.tamanho, url: urlAnexo.get(x.path) || null }))
         }))
       })),
+      modeloPorAlianca: (r.aneis || []).length > 1 && (r.aneis || []).some((a) => (a.modelo_atual ?? r.modelo_atual) !== (r.aneis[0].modelo_atual ?? r.modelo_atual) || (a.modelo_novo ?? r.modelo_novo) !== (r.aneis[0].modelo_novo ?? r.modelo_novo)),
       versao: r.versao, versaoEm: fmt(r.versao_em), impressaVersao: r.impressa_versao, status: r.status,
       nota: r.nota_equipe || '', divergencia: r.divergencia ? (r.divergencia_nota || 'Sim') : '',
       eventos: [
@@ -106,9 +131,10 @@
   function paraDb(t) {
     return {
       referencia: t.ref, peca: t.peca === 'Par' ? 'par' : 'avulsa', tipos: ordenar(t.tipos),
-      modelo_atual: t.modelo, modelo_novo: t.modeloNovo, defeito_descricao: t.defeito, observacao: t.obs,
+      modelo_atual: resumoModelo(t, false), modelo_novo: resumoModelo(t, true), defeito_descricao: t.defeito, observacao: t.obs,
       aneis: t.aneis.map((a) => ({
         identificacao: a.w === 'Masc.' ? 'masculina' : 'feminina', pedra: a.w === 'Fem.' && !!a.pedra,
+        modelo_atual: modeloDe(t, a), modelo_novo: modeloNovoDe(t, a),
         aro_atual: a.de, aro_novo: t.tipos.includes('troca_aro') ? a.para : null,
         gravacoes: a.gravs.map((g) => ({
           local: g.local.toLowerCase(), texto: g.texto, fonte: g.texto ? g.fonte : '',
@@ -221,13 +247,15 @@
     const algum = grav && t.aneis.some((a) => a.gravs.length);
     const corpo = t.aneis.map((a) => {
       const gravs = grav ? a.gravs : [];
-      const ring = `<tr class="ring"><td colspan="3"><b>${NOME_ANEL[a.w] || esc(a.w)}</b>${a.pedra ? ' · <span class="pedra">com pedra</span>' : ''} · ${pAro(t, a)}${gravs.length ? '' : ' · <span class="fonte">sem gravação</span>'}</td></tr>`;
+      const mod = t.modeloPorAlianca ? ` · ${esc(modeloDe(t, a)) || '?'}${modeloNovoDe(t, a) ? ` → <b>${esc(modeloNovoDe(t, a))}</b>` : ''}` : '';
+      const ring = `<tr class="ring"><td colspan="3"><b>${NOME_ANEL[a.w] || esc(a.w)}</b>${a.pedra ? ' · <span class="pedra">com pedra</span>' : ''}${mod} · ${pAro(t, a)}${gravs.length ? '' : ' · <span class="fonte">sem gravação</span>'}</td></tr>`;
       return `<tbody>${ring}${gravs.map((g) => `<tr class="gv"><td>${esc(g.local)}</td><td>${pTexto(g)}</td><td>${pFonte(g)}</td></tr>`).join('')}</tbody>`;
     }).join('');
     return `<table class="aneis"><colgroup><col class="cl"><col><col class="cf"></colgroup>${algum ? '<thead><tr><th>Local</th><th>Gravação (texto exato)</th><th>Fonte</th></tr></thead>' : ''}${corpo}</table>`;
   }
   function pLinhas(t) {
-    let h = `<div class="prow"><span class="k">Modelo</span><span class="v">${esc(t.modelo) || '<span class="fonte">?</span>'}${t.tipos.includes('troca_modelo') && t.modeloNovo ? ` → <b>${esc(t.modeloNovo)}</b>` : ''}</span></div>`;
+    let h = t.modeloPorAlianca ? ''
+      : `<div class="prow"><span class="k">Modelo</span><span class="v">${esc(t.modelo) || '<span class="fonte">?</span>'}${t.tipos.includes('troca_modelo') && t.modeloNovo ? ` → <b>${esc(t.modeloNovo)}</b>` : ''}</span></div>`;
     if (t.tipos.includes('defeito') && t.defeito) h += `<div class="prow"><span class="k">Defeito</span><span class="v">${esc(t.defeito)}</span></div>`;
     if (t.obs) h += `<div class="prow"><span class="k">Obs.</span><span class="v">${esc(t.obs)}</span></div>`;
     return h;
@@ -307,7 +335,8 @@
   function resumoAneisUI(t) {
     return t.aneis.map((a) => {
       const gr = temGrav(t) ? a.gravs.map((g) => `<div>Gravação ${esc(g.local.toLowerCase())}: ${textoOuDesenho(g)}${g.texto ? ` · fonte ${esc(g.fonte)}` : ''}${(g.anexos || []).length ? ` · ${miniAnexos(g)}${plural(g.anexos.length, 'anexo', 'anexos')}` : ''}</div>`).join('') : '';
-      return `<div><b>${NOME_ANEL[a.w] || esc(a.w)}</b>${a.pedra ? ' <span class="pedra-ui">com pedra</span>' : ''} · ${aroUI(t, a)}</div>${gr}`;
+      const mod = t.modeloPorAlianca ? ` · ${esc(modeloDe(t, a))}${modeloNovoDe(t, a) ? ` → <b>${esc(modeloNovoDe(t, a))}</b>` : ''}` : '';
+      return `<div><b>${NOME_ANEL[a.w] || esc(a.w)}</b>${a.pedra ? ' <span class="pedra-ui">com pedra</span>' : ''}${mod} · ${aroUI(t, a)}</div>${gr}`;
     }).join('');
   }
   function tabelaAneisUI(t) {
@@ -380,7 +409,7 @@
           <button class="btn sm ghost danger" data-act="excluir" data-cod="${t.codigo}" id="ex-${t.codigo}">Excluir</button>
         </div>
       </div>
-      <div class="tc-body">${t.tipos.includes('troca_modelo') ? `<div>Modelo <b>${esc(t.modelo)}</b> → <b>${esc(t.modeloNovo)}</b></div>` : `<div>Modelo <b>${esc(t.modelo)}</b></div>`}${resumoAneisUI(t)}${t.tipos.includes('defeito') ? `<div>Defeito: ${esc(t.defeito)}</div>` : ''}</div>
+      <div class="tc-body">${t.modeloPorAlianca ? '' : (t.tipos.includes('troca_modelo') ? `<div>Modelo <b>${esc(t.modelo)}</b> → <b>${esc(t.modeloNovo)}</b></div>` : `<div>Modelo <b>${esc(t.modelo)}</b></div>`)}${resumoAneisUI(t)}${t.tipos.includes('defeito') ? `<div>Defeito: ${esc(t.defeito)}</div>` : ''}</div>
     </article>`;
   }
   function abertoHTML() {
@@ -433,6 +462,11 @@
       </div>
     </div>`;
   }
+  function selectModelo(id, bind, valor, extraClass) {
+    const lista = valor && !MODELOS.includes(valor) ? [valor, ...MODELOS] : MODELOS;
+    return `<select id="${id}" class="${extraClass || ''}" data-bind="${bind}" data-change="modelo">
+      <option value="">Escolha o modelo</option>${lista.map((m) => `<option value="${esc(m)}"${m === valor ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select>`;
+  }
   function anelFormHTML(a, i, f) {
     const has = (k) => f.tipos.includes(k);
     const titulo = f.aneis.length > 1 ? `Aliança ${i + 1}` : 'Aliança';
@@ -450,6 +484,11 @@
       <div class="aro-msg" id="f-a${i}-aro-msg" role="alert">${msgsAro(a, has('troca_aro')).map(esc).join('<br>')}</div>
       <span class="hint">Aros de ${faixaAro(a)[0]} a ${faixaAro(a)[1]}${a.w === 'Fem.' && a.pedra ? ' (com pedra)' : ''}.</span>
       ${a.w === 'Fem.' ? `<div class="chips"><label class="chip-check"><input type="checkbox" id="f-a${i}-pedra" data-change="pedra" data-i="${i}"${a.pedra ? ' checked' : ''}><span class="box">✓</span>Com pedra</label></div>` : ''}
+      ${f.modeloPorAlianca ? `<div class="grid2">
+        <label class="field" for="f-a${i}-modelo"><span>Modelo atual</span>${selectModelo(`f-a${i}-modelo`, `aneis.${i}.modelo`, a.modelo, inv(`f-a${i}-modelo`))}</label>
+        ${has('troca_modelo') ? `<label class="field" for="f-a${i}-modelo-novo"><span>Modelo novo</span>${selectModelo(`f-a${i}-modelo-novo`, `aneis.${i}.modeloNovo`, a.modeloNovo, inv(`f-a${i}-modelo-novo`))}</label>` : ''}
+      </div>` : ''}
+      ${erroPedra(f, a) ? `<div class="aro-msg" role="alert">${esc(erroPedra(f, a))}</div>` : ''}
       ${temGrav(f) ? `<div class="gravs">
         <span class="sub-label" id="lbl-g${i}">Onde gravar</span>
         <div class="chips" role="group" aria-labelledby="lbl-g${i}">${['Interna', 'Externa'].map((loc) => `<label class="chip-check"><input type="checkbox" id="f-a${i}-g-${loc}" data-change="grav-local" data-i="${i}" value="${loc}"${a.gravs.some((g) => g.local === loc) ? ' checked' : ''}><span class="box">✓</span>${loc}</label>`).join('')}</div>
@@ -486,10 +525,11 @@
             <em class="hint">Marque tudo o que vale para esta troca.</em></div>
         </fieldset>
         <fieldset class="card"><legend>Modelo</legend>
-          <div class="grid2">
-            <label class="field" for="f-modelo"><span>Modelo atual</span><input id="f-modelo" class="${inv('f-modelo')}" data-bind="modelo" maxlength="60" value="${esc(f.modelo)}" placeholder="Ex.: Anatômica 6 mm polida" autocomplete="off"></label>
-            ${has('troca_modelo') ? `<label class="field" for="f-modelo-novo"><span>Modelo novo</span><input id="f-modelo-novo" class="${inv('f-modelo-novo')}" data-bind="modeloNovo" maxlength="60" value="${esc(f.modeloNovo)}" placeholder="Para qual modelo vai" autocomplete="off"></label>` : ''}
-          </div>
+          ${f.modeloPorAlianca ? '<span class="hint">O modelo de cada aliança é escolhido abaixo, em “Alianças do par”.</span>' : `<div class="grid2">
+            <label class="field" for="f-modelo"><span>Modelo atual</span>${selectModelo('f-modelo', 'modelo', f.modelo, inv('f-modelo'))}</label>
+            ${has('troca_modelo') ? `<label class="field" for="f-modelo-novo"><span>Modelo novo</span>${selectModelo('f-modelo-novo', 'modeloNovo', f.modeloNovo, inv('f-modelo-novo'))}</label>` : ''}
+          </div>`}
+          ${f.aneis.length > 1 ? `<div class="chips"><label class="chip-check"><input type="checkbox" id="f-modelo-por-alianca" data-change="modelo-por-alianca"${f.modeloPorAlianca ? ' checked' : ''}><span class="box">✓</span>Cada aliança tem um modelo diferente</label></div>` : ''}
         </fieldset>
         <fieldset class="card"><legend>${f.aneis.length > 1 ? 'Alianças do par' : 'Aliança'}</legend>
           ${f.aneis.map((a, i) => anelFormHTML(a, i, f)).join('')}
@@ -556,7 +596,9 @@
     const dl = [
       ['Peça', esc(t.peca)],
       ['Tipo', ordenar(t.tipos).map((k) => `<span class="tag">${TIPOS[k]}</span>`).join(' ')],
-      ['Modelo', esc(t.modelo) + (t.tipos.includes('troca_modelo') ? ` → <b>${esc(t.modeloNovo)}</b>` : '')],
+      ['Modelo', t.modeloPorAlianca
+        ? t.aneis.map((a) => `${NOME_ANEL[a.w]}: ${esc(modeloDe(t, a))}${modeloNovoDe(t, a) ? ` → <b>${esc(modeloNovoDe(t, a))}</b>` : ''}`).join('<br>')
+        : esc(t.modelo) + (t.tipos.includes('troca_modelo') ? ` → <b>${esc(t.modeloNovo)}</b>` : '')],
       ...(t.tipos.includes('defeito') ? [['Defeito', esc(t.defeito)]] : []),
       ...(t.obs ? [['Observação', esc(t.obs)]] : []),
       ['Atualizada em', `${t.versaoEm} ${pill(impressao(t))}`]
@@ -674,14 +716,15 @@
   }
 
   /* ── Formulário ─────────────────────────────────────────────── */
-  const anel = (w, de, para = null, gravs = [], pedra = false) => ({ w, de, para, gravs, pedra });
-  const novaTroca = () => ({ id: uuid(), codigo: '', ref: '', peca: 'Par', tipos: [], modelo: '', modeloNovo: '', defeito: '', obs: '',
+  const anel = (w, de, para = null, gravs = [], pedra = false) => ({ w, de, para, gravs, pedra, modelo: '', modeloNovo: '' });
+  const novaTroca = () => ({ id: uuid(), codigo: '', ref: '', peca: 'Par', tipos: [], modelo: '', modeloNovo: '', modeloPorAlianca: false, defeito: '', obs: '',
     aneis: [anel('Fem.', null), anel('Masc.', null)], versao: 1, versaoEm: null, impressaVersao: null, status: 'rascunho' });
   function setPath(f, path, valor) {
     const p = path.split('.');
     if (p[0] !== 'aneis') { f[p[0]] = valor; return; }
     const a = f.aneis[Number(p[1])];
     if (p[2] === 'gravs') { const g = a.gravs.find((x) => x.local === p[3]); if (g) g[p[4]] = valor; return; }
+    if (p[2] === 'modelo' || p[2] === 'modeloNovo') { a[p[2]] = valor; return; }
     a[p[2]] = valor === '' ? null : Number(valor);
   }
   function validar(f) {
@@ -689,8 +732,17 @@
     const has = (k) => f.tipos.includes(k);
     if (!f.ref.trim()) { e.push('Preencha a referência (nome do cliente ou nº do pedido).'); bad.add('f-ref'); }
     if (!f.tipos.length) { e.push('Marque o que precisa ser feito nesta troca.'); bad.add('f-tipos'); }
-    if (!f.modelo.trim()) { e.push('Preencha o modelo atual.'); bad.add('f-modelo'); }
-    if (has('troca_modelo') && !f.modeloNovo.trim()) { e.push('Preencha o modelo novo.'); bad.add('f-modelo-novo'); }
+    if (!f.modeloPorAlianca) {
+      if (!f.modelo) { e.push('Escolha o modelo atual.'); bad.add('f-modelo'); }
+      if (has('troca_modelo') && !f.modeloNovo) { e.push('Escolha o modelo novo.'); bad.add('f-modelo-novo'); }
+    }
+    f.aneis.forEach((a, i) => {
+      const qual = f.aneis.length > 1 ? `da aliança ${i + 1}` : 'da aliança';
+      if (f.modeloPorAlianca && !a.modelo) { e.push(`Escolha o modelo atual ${qual}.`); bad.add(`f-a${i}-modelo`); }
+      if (f.modeloPorAlianca && has('troca_modelo') && !a.modeloNovo) { e.push(`Escolha o modelo novo ${qual}.`); bad.add(`f-a${i}-modelo-novo`); }
+      if (erroPedra(f, a)) { e.push(`Aliança ${f.aneis.length > 1 ? i + 1 + ' ' : ''}(feminina com pedra): ${erroPedra(f, a)}`); bad.add(f.modeloPorAlianca ? `f-a${i}-modelo` : 'f-modelo'); }
+    });
+    if (has('troca_modelo') && f.aneis.every((a) => modeloDe(f, a) && modeloDe(f, a) === modeloNovoDe(f, a))) { e.push('O modelo novo é igual ao atual. Escolha outro modelo ou desmarque “Troca de modelo”.'); bad.add('f-modelo-novo'); }
     f.aneis.forEach((a, i) => {
       const qual = f.aneis.length > 1 ? `da aliança ${i + 1}` : 'da aliança';
       if (!a.de) { e.push(`Preencha o aro atual ${qual}.`); bad.add(`f-a${i}-de`); }
@@ -710,7 +762,10 @@
   function normalizar(f) {
     const t = clone(f);
     const has = (k) => t.tipos.includes(k);
-    t.ref = t.ref.trim(); t.modelo = t.modelo.trim(); t.modeloNovo = has('troca_modelo') ? t.modeloNovo.trim() : '';
+    if (t.aneis.length < 2) t.modeloPorAlianca = false;
+    if (t.modeloPorAlianca) { t.modelo = resumoModelo(t, false); t.modeloNovo = resumoModelo(t, true); }
+    else t.aneis.forEach((a) => { a.modelo = t.modelo; a.modeloNovo = has('troca_modelo') ? t.modeloNovo : ''; });
+    t.ref = t.ref.trim(); t.modeloNovo = has('troca_modelo') ? t.modeloNovo : '';
     t.defeito = has('defeito') ? t.defeito.trim() : ''; t.obs = t.obs.trim();
     t.aneis.forEach((a) => {
       if (!has('troca_aro')) a.para = null;
@@ -959,18 +1014,34 @@
   });
 
   let previaPendente = false;
+  let timerAro = null;
+  function avisarAro(el) {
+    const m = /^aneis\.(\d+)\.(de|para)$/.exec(el?.dataset?.bind || '');
+    if (!m || !ui.form) return;
+    const i = Number(m[1]);
+    const a = ui.form.aneis[i];
+    if (!a) return;
+    const campo = document.getElementById(`f-a${i}-${m[2]}`);
+    if (campo) campo.classList.toggle('is-invalid', !!erroAro(a, a[m[2]]));
+    const box = document.getElementById(`f-a${i}-aro-msg`);
+    if (box) box.innerHTML = msgsAro(a, ui.form.tipos.includes('troca_aro')).map(esc).join('<br>');
+  }
+  // saiu do campo de aro: avisa na hora
+  document.addEventListener('focusout', (ev) => {
+    if (/^aneis\.\d+\.(de|para)$/.test(ev.target?.dataset?.bind || '')) { clearTimeout(timerAro); avisarAro(ev.target); }
+  });
   document.addEventListener('input', (ev) => {
     const el = ev.target;
     if (!el.dataset.bind || !ui.form) return;
     setPath(ui.form, el.dataset.bind, el.value);
     if (ui.invalid.has(el.id)) { ui.invalid.delete(el.id); el.classList.remove('is-invalid'); }
-    const mAro = /^aneis\.(\d+)\.(de|para)$/.exec(el.dataset.bind);
-    if (mAro) {
-      const i = Number(mAro[1]);
-      const a = ui.form.aneis[i];
-      el.classList.toggle('is-invalid', !!erroAro(a, a[mAro[2]]));
-      const box = document.getElementById(`f-a${i}-aro-msg`);
-      if (box) box.innerHTML = msgsAro(a, ui.form.tipos.includes('troca_aro')).map(esc).join('<br>');
+    if (/^aneis\.\d+\.(de|para)$/.test(el.dataset.bind)) {
+      // espera ela terminar de digitar o aro (ex.: "12") antes de avisar
+      el.classList.remove('is-invalid');
+      const box = document.getElementById(el.id.replace(/-(de|para)$/, '-aro-msg'));
+      if (box) box.innerHTML = '';
+      clearTimeout(timerAro);
+      timerAro = setTimeout(() => avisarAro(el), 900);
     }
     if (el.tagName === 'TEXTAREA' && el.id.endsWith('-texto')) {
       const cnt = document.getElementById(el.id.replace(/-texto$/, '-cnt'));
@@ -996,7 +1067,12 @@
     if (kind === 'peca') {
       f.peca = el.value;
       if (f.peca === 'Par' && f.aneis.length === 1) f.aneis.push(anel(f.aneis[0].w === 'Fem.' ? 'Masc.' : 'Fem.', null));
-      if (f.peca === 'Avulsa') f.aneis = [f.aneis[0]];
+      if (f.peca === 'Par' && f.aneis.length === 2 && !f.aneis[1].modelo) { f.aneis[1].modelo = f.aneis[0].modelo || f.modelo; f.aneis[1].modeloNovo = f.aneis[0].modeloNovo || f.modeloNovo; }
+      if (f.peca === 'Avulsa') {
+        if (f.modeloPorAlianca) { f.modelo = f.aneis[0].modelo || ''; f.modeloNovo = f.aneis[0].modeloNovo || ''; }
+        f.modeloPorAlianca = false;
+        f.aneis = [f.aneis[0]];
+      }
     } else if (kind === 'tipo') {
       f.tipos = el.checked ? ordenar([...f.tipos, el.value]) : f.tipos.filter((k) => k !== el.value);
       if (el.value === 'troca_aro' && el.checked) f.aneis.forEach((a) => { if (a.para == null) a.para = a.de; });
@@ -1005,6 +1081,12 @@
       const a = f.aneis[Number(el.dataset.i)];
       a.w = el.value;
       if (a.w !== 'Fem.') a.pedra = false;
+    } else if (kind === 'modelo') {
+      // valor já foi gravado pelo data-bind; só redesenha para atualizar avisos
+    } else if (kind === 'modelo-por-alianca') {
+      f.modeloPorAlianca = el.checked;
+      if (el.checked) f.aneis.forEach((a) => { a.modelo = f.modelo; a.modeloNovo = f.modeloNovo; });
+      else { f.modelo = f.aneis[0].modelo || ''; f.modeloNovo = f.aneis[0].modeloNovo || ''; }
     } else if (kind === 'pedra') {
       f.aneis[Number(el.dataset.i)].pedra = el.checked;
     } else if (kind === 'anexo') {

@@ -308,7 +308,7 @@
         ${db.cliente ? `<button class="tab${emAberto ? ' on' : ''}" data-act="go-aberto" id="tab-aberto">Pacote aberto <span class="count">${n}</span></button>` : ''}
         <button class="tab${!emAberto ? ' on' : ''}" data-act="go-pacotes" id="tab-pacotes">Pacotes enviados</button>
       </nav>
-      <div class="user">${db.equipe ? '<span class="proto">Equipe</span>' : ''}<span>${esc(nome)}</span><button class="link" data-act="logout" id="btn-sair">Sair</button></div>
+      <div class="user">${db.equipe ? '<span class="proto">Equipe</span>' : ''}<span>${esc(nome)}</span><button class="link" data-act="trocar-senha" id="btn-senha">Trocar senha</button><button class="link" data-act="logout" id="btn-sair">Sair</button></div>
     </div></header>`;
   }
   const flashHTML = () => (ui.flash ? `<div class="flash${ui.flash.warn ? ' warn' : ''} print-hide" role="status"><div>${ui.flash.html}</div></div>` : '');
@@ -327,9 +327,10 @@
     if (ui.recuperacao) {
       return `<main class="login gutter"><form class="card login-card" data-form="nova-senha">
         <div class="mark">Medieval Joias</div>
-        <p class="muted">Crie a sua senha nova</p>
+        <p class="muted">Crie a sua senha nova (mínimo 8 caracteres)</p>
         <label class="field" for="l-nova"><span>Senha nova</span><input id="l-nova" type="password" minlength="8" autocomplete="new-password" required></label>
         <button class="btn accent" type="submit" id="l-salvar-senha">Salvar senha</button>
+        ${db.user ? '<button class="link" type="button" data-act="cancelar-senha" id="l-cancelar-senha" style="justify-self:center">Voltar</button>' : ''}
         ${ui.flash ? `<p class="muted" role="status">${ui.flash.html}</p>` : ''}
       </form></main>`;
     }
@@ -849,13 +850,18 @@
     if (saindoDoForm) await descartarUploads();
     if (act === 'go-aberto') ir('aberto', { form: null, editId: null, editLote: null, errors: [], invalid: new Set() });
     else if (act === 'go-pacotes') ir('pacotes');
+    else if (act === 'cancelar-senha') { ui.recuperacao = false; ir(inicio()); }
     else if (act === 'logout') { await sb.auth.signOut(); }
     else if (act === 'esqueci') {
-      const email = document.getElementById('l-email')?.value.trim();
-      ui.loginEmail = email || '';
-      if (!email) { ui.flash = { html: 'Escreva o seu e-mail e toque em “Esqueci a senha” de novo.' }; render(); return; }
-      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-      ui.flash = { html: error ? esc(msgErro(error)) : 'Pronto. Chegou um e-mail com o link para criar uma senha nova.' };
+      ui.loginEmail = document.getElementById('l-email')?.value.trim() || '';
+      ui.flash = { html: 'Fale com a Medieval pelo WhatsApp: ela cria uma senha nova para você. Depois de entrar, dá para trocar a senha em “Trocar senha”.' };
+      render();
+    }
+    else if (act === 'trocar-senha') {
+      ui.modal = null;
+      ui.recuperacao = true;
+      ui.flash = null;
+      ui.view = 'login';
       render();
     }
     else if (act === 'nova') ir('form', { form: novaTroca(), original: null, editId: null, editLote: null, errors: [], invalid: new Set(), uploads: [] });
@@ -914,8 +920,9 @@
       const { error } = await sb.auth.updateUser({ password: document.getElementById('l-nova').value });
       if (error) { ui.flash = { html: esc(msgErro(error)) }; render(); return; }
       ui.recuperacao = false;
-      history.replaceState(null, '', location.pathname);
-      await entrar();
+      if (/access_token|type=recovery/.test(location.hash)) history.replaceState(null, '', location.pathname);
+      if (db.user) ir(inicio(), { flash: { html: '<b>Senha trocada.</b>' } });
+      else await entrar();
     }
     else if (f.dataset.form === 'troca') salvarTroca();
     else if (f.dataset.form === 'buscar') buscar(document.getElementById('busca').value);

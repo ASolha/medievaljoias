@@ -29,13 +29,13 @@
   const QR_TROCA = 'https://medievaljoias.com.br/pedidos/#/t/';
   const QR_PACOTE = 'https://medievaljoias.com.br/pedidos/#/p/';
   const MM = 96 / 25.4, CAP_1 = 281 - 11 - 29, CAP_N = 281 - 11, LONGA = 24;
-  const ETAPAS = ['Enviada', 'Recebida pela Medieval', 'Concluída', 'Devolvida'];
+  const ETAPAS = ['Enviada', 'Recebida pela Medieval', 'Finalizada e enviada de volta'];
   const ST = {
     rascunho: { t: 'No pacote aberto', k: 'neutral' },
     enviada: { t: 'Enviada', k: 'info' },
     recebida: { t: 'Recebida', k: 'warn' },
-    concluida: { t: 'Concluída', k: 'ok' },
-    devolvida: { t: 'Devolvida', k: 'done' },
+    concluida: { t: 'Finalizada', k: 'ok' },
+    devolvida: { t: 'Finalizada', k: 'ok' },
     cancelada: { t: 'Cancelada', k: 'done' }
   };
   const NOME_ANEL = { 'Fem.': 'Feminina', 'Masc.': 'Masculina' };
@@ -82,7 +82,7 @@
       versao: r.versao, versaoEm: fmt(r.versao_em), impressaVersao: r.impressa_versao, status: r.status,
       nota: r.nota_equipe || '', divergencia: r.divergencia ? (r.divergencia_nota || 'Sim') : '',
       eventos: [
-        ['Enviada', lote?.fechado_em], ['Recebida pela Medieval', r.conferido_em], ['Concluída', r.concluido_em], ['Devolvida', r.devolvido_em]
+        ['Enviada', lote?.fechado_em], ['Recebida pela Medieval', r.conferido_em], ['Finalizada e enviada de volta', r.devolvido_em || r.concluido_em]
       ].filter(([, d]) => d).map(([acao, d]) => ({ acao, data: fmt(d) }))
     };
   }
@@ -219,8 +219,8 @@
   function pVia(t, via) {
     const label = via === 1 ? `1ª via · <span class="who">${esc(t.clienteNome || nomeDoPapel())}</span>` : '2ª via · <span class="who">Medieval Joias</span>';
     const foot = t.versaoEm
-      ? `<span>Versão <b>${t.versao}</b> · ${t.versaoEm}</span><span>Pacote ${pacoteDe(t.codigo)}</span>`
-      : '<span>Versão e código saem ao salvar</span><span></span>';
+      ? `<span>Atualizada em <b>${t.versaoEm}</b></span><span>Pacote ${pacoteDe(t.codigo)}</span>`
+      : '<span>Código e data saem ao salvar</span><span></span>';
     return `<div class="via">
       <div class="via-top">
         <div class="via-id">
@@ -268,13 +268,13 @@
   const pill = (s) => `<span class="pill ${s.k}">${esc(s.t)}</span>`;
   function impressao(t) {
     if (t.impressaVersao == null) return { t: 'Ainda não impressa', k: 'neutral' };
-    if (t.impressaVersao === t.versao) return { t: `Impressa · v${t.versao}`, k: 'ok' };
-    return { t: `Alterada · imprima a v${t.versao}`, k: 'warn' };
+    if (t.impressaVersao === t.versao) return { t: 'Impressa', k: 'ok' };
+    return { t: 'Alterada depois de impressa · imprima de novo', k: 'warn' };
   }
   const precisaImprimir = (t) => t.impressaVersao !== t.versao;
   function loteStatus(l) {
     const s = l.itens.map((i) => i.status);
-    if (l.status === 'devolvido' || (s.length && s.every((x) => x === 'devolvida' || x === 'cancelada'))) return { t: 'Devolvido', k: 'done' };
+    if (l.status === 'devolvido' || (s.length && s.every((x) => x === 'devolvida' || x === 'concluida' || x === 'cancelada'))) return { t: 'Finalizado', k: 'ok' };
     if (s.some((x) => x !== 'enviada')) return { t: 'Em andamento', k: 'warn' };
     return { t: 'Aguardando a Medieval receber', k: 'info' };
   }
@@ -448,7 +448,7 @@
     return `<section class="page">
       ${voltar}
       <div class="page-head"><div><h1>${ui.editId ? `Editar troca <span class="mono" style="font-size:18px;color:var(--muted)">${f.codigo}</span>` : 'Nova troca'}</h1>
-        <span class="muted">${ui.editId ? (jaImpressa ? `Esta troca já foi impressa na v${f.versao}. Se você mudar algo, ela vira v${f.versao + 1} e você imprime só ela de novo.` : 'Ainda não foi impressa. Pode mudar à vontade.') : 'Ao salvar, a troca ganha o código e já pode ser impressa.'}</span></div></div>
+        <span class="muted">${ui.editId ? (jaImpressa ? 'Esta troca já foi impressa. Se você mudar algo, imprima só ela de novo e troque o papel na aliança.' : 'Ainda não foi impressa. Pode mudar à vontade.') : 'Ao salvar, a troca ganha o código e já pode ser impressa.'}</span></div></div>
       ${erros}
       <form class="form" data-form="troca" novalidate>
         <fieldset class="card"><legend>Cliente</legend>
@@ -485,9 +485,9 @@
 
   function barraHTML(itens) {
     const n = itens.length || 1;
-    const c = { enviada: 0, recebida: 0, concluida: 0, devolvida: 0 };
-    itens.forEach((t) => { if (t.status in c) c[t.status] += 1; });
-    const ordem = ['devolvida', 'concluida', 'recebida', 'enviada'];
+    const c = { enviada: 0, recebida: 0, devolvida: 0 };
+    itens.forEach((t) => { const st = t.status === 'concluida' ? 'devolvida' : t.status; if (st in c) c[st] += 1; });
+    const ordem = ['devolvida', 'recebida', 'enviada'];
     const bar = ordem.filter((s) => c[s]).map((s) => `<span class="${ST[s].k}" style="width:${(c[s] / n) * 100}%"></span>`).join('');
     const leg = ordem.filter((s) => c[s]).map((s) => `<span><i class="${ST[s].k}"></i>${c[s]} ${ST[s].t.toLowerCase()}${c[s] > 1 ? 's' : ''}</span>`).join('');
     return `<div class="bar" aria-hidden="true">${bar}</div><div class="legend">${leg}</div>`;
@@ -540,7 +540,7 @@
       ['Modelo', esc(t.modelo) + (t.tipos.includes('troca_modelo') ? ` → <b>${esc(t.modeloNovo)}</b>` : '')],
       ...(t.tipos.includes('defeito') ? [['Defeito', esc(t.defeito)]] : []),
       ...(t.obs ? [['Observação', esc(t.obs)]] : []),
-      ['Versão', `v${t.versao} · ${t.versaoEm} ${pill(impressao(t))}`]
+      ['Atualizada em', `${t.versaoEm} ${pill(impressao(t))}`]
     ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
     const podeEditar = t.status === 'enviada' && !!db.cliente;
     return `<section class="page">
@@ -577,7 +577,7 @@
       const voltar = p.origem === 'aberto' ? '<button class="link back print-hide" data-act="go-aberto" id="i-voltar">← Pacote aberto</button>' : `<button class="link back print-hide" data-act="troca" data-cod="${t.codigo}" id="i-voltar">← ${t.codigo}</button>`;
       return `<section class="page">
         ${voltar}
-        <div class="page-head print-hide"><div><h1>Imprimir <span class="mono">${t.codigo}</span></h1><span class="muted">${esc(t.ref)} · versão ${t.versao} · a tira sai no topo de uma folha A4</span></div>
+        <div class="page-head print-hide"><div><h1>Imprimir <span class="mono">${t.codigo}</span></h1><span class="muted">${esc(t.ref)} · a tira sai no topo de uma folha A4</span></div>
           <button class="btn accent" data-act="imprimir-ja" id="i-imprimir">Imprimir</button></div>
         <div class="sheets">${pFolhas({ itens: [t], lote: null, titulo: `Troca ${t.codigo}`, nome })}</div>
       </section>`;
@@ -718,7 +718,7 @@
         ui.uploads = [];
         await recarregar();
         const msg = !mudou ? 'Nada mudou nesta troca.'
-          : (subiu ? `<b>Troca ${data.codigo} alterada para a v${data.versao}.</b> Imprima de novo o canhoto desta troca e troque o papel na aliança. <button class="link" data-act="imprimir-troca" data-cod="${data.codigo}">Imprimir agora</button>` : `<b>Troca ${data.codigo} salva.</b>`);
+          : (subiu ? `<b>Troca ${data.codigo} alterada.</b> Imprima de novo o canhoto desta troca e troque o papel na aliança. <button class="link" data-act="imprimir-troca" data-cod="${data.codigo}">Imprimir agora</button>` : `<b>Troca ${data.codigo} salva.</b>`);
         const extra = { form: null, original: null, editId: null, errors: [], invalid: new Set(), ocupado: false, flash: { html: msg, warn: subiu } };
         if (ui.editLote) ir('troca', { ...extra, troca: data.codigo, editLote: null }); else ir('aberto', { ...extra, editLote: null });
         return;
@@ -770,7 +770,7 @@
       if (!db.cliente || !itens.length) return;
       ui.modal = {
         title: 'Os canhotos saíram na impressora?',
-        body: `Se saíram, ${plural(itens.length, 'a troca fica marcada como impressa', 'as trocas ficam marcadas como impressas')} na versão de agora.`,
+        body: `Se saíram, ${plural(itens.length, 'a troca fica marcada como impressa', 'as trocas ficam marcadas como impressas')} como estão agora.`,
         ok: 'Sim, saíram', cancel: 'Não saíram',
         run: async () => {
           try {

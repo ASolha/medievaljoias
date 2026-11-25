@@ -25,6 +25,23 @@
   // Mesmos caracteres do módulo de Gravação do Sentinela (♥ U+2665, ∞ U+221E) + o coração vazado (♡ U+2661)
   const SIMBOLOS = [{ c: '♥', t: 'Coração' }, { c: '♡', t: 'Coração vazado' }, { c: '∞', t: 'Infinito' }];
   const MAX_ANEXOS = 3;
+  // Aros que a Medieval trabalha: sem pedra 10 a 35, com pedra 10 a 25 (só números inteiros)
+  const ARO_MIN = 10, ARO_MAX = 35, ARO_MAX_PEDRA = 25;
+  const faixaAro = (a) => (a.w === 'Fem.' && a.pedra ? [ARO_MIN, ARO_MAX_PEDRA] : [ARO_MIN, ARO_MAX]);
+  function erroAro(a, v) {
+    if (v == null || v === '') return '';
+    const [min, max] = faixaAro(a);
+    const pedra = a.w === 'Fem.' && a.pedra;
+    if (!Number.isInteger(v)) return `Use um aro inteiro (ex.: 16). Trabalhamos com aros de ${min} a ${max}${pedra ? ' para aliança com pedra' : ''}.`;
+    if (v < min || v > max) return `O aro ${v} não é fornecido. Trabalhamos com aros de ${min} a ${max}${pedra ? ' para aliança com pedra' : ' (com pedra, de 10 a 25)'}.`;
+    return '';
+  }
+  function msgsAro(a, comNovo) {
+    const m = [];
+    const e1 = erroAro(a, a.de); if (e1) m.push(`Aro atual: ${e1}`);
+    if (comNovo) { const e2 = erroAro(a, a.para); if (e2) m.push(`Aro novo: ${e2}`); }
+    return m;
+  }
   const MAX_BYTES = 10 * 1024 * 1024;
   const QR_TROCA = 'https://medievaljoias.com.br/pedidos/#/t/';
   const QR_PACOTE = 'https://medievaljoias.com.br/pedidos/#/p/';
@@ -427,9 +444,11 @@
             <label><input type="radio" name="f-a${i}-w" id="f-a${i}-w-f" value="Fem." data-change="anel-w" data-i="${i}"${a.w === 'Fem.' ? ' checked' : ''}>Feminina</label>
             <label><input type="radio" name="f-a${i}-w" id="f-a${i}-w-m" value="Masc." data-change="anel-w" data-i="${i}"${a.w === 'Masc.' ? ' checked' : ''}>Masculina</label>
           </div></div>
-        <label class="field" for="f-a${i}-de"><span>Aro atual</span><input id="f-a${i}-de" class="${inv(`f-a${i}-de`)}" type="number" inputmode="numeric" min="5" max="40" data-bind="aneis.${i}.de" value="${a.de ?? ''}"></label>
-        ${has('troca_aro') ? `<label class="field" for="f-a${i}-para"><span>Aro novo <em>(igual = mantém)</em></span><input id="f-a${i}-para" class="${inv(`f-a${i}-para`)}" type="number" inputmode="numeric" min="5" max="40" data-bind="aneis.${i}.para" value="${a.para ?? ''}"></label>` : ''}
+        <label class="field" for="f-a${i}-de"><span>Aro atual</span><input id="f-a${i}-de" class="${inv(`f-a${i}-de`)}${erroAro(a, a.de) ? ' is-invalid' : ''}" type="number" inputmode="numeric" step="1" min="${faixaAro(a)[0]}" max="${faixaAro(a)[1]}" data-bind="aneis.${i}.de" value="${a.de ?? ''}"></label>
+        ${has('troca_aro') ? `<label class="field" for="f-a${i}-para"><span>Aro novo <em>(igual = mantém)</em></span><input id="f-a${i}-para" class="${inv(`f-a${i}-para`)}${erroAro(a, a.para) ? ' is-invalid' : ''}" type="number" inputmode="numeric" step="1" min="${faixaAro(a)[0]}" max="${faixaAro(a)[1]}" data-bind="aneis.${i}.para" value="${a.para ?? ''}"></label>` : ''}
       </div>
+      <div class="aro-msg" id="f-a${i}-aro-msg" role="alert">${msgsAro(a, has('troca_aro')).map(esc).join('<br>')}</div>
+      <span class="hint">Aros de ${faixaAro(a)[0]} a ${faixaAro(a)[1]}${a.w === 'Fem.' && a.pedra ? ' (com pedra)' : ''}.</span>
       ${a.w === 'Fem.' ? `<div class="chips"><label class="chip-check"><input type="checkbox" id="f-a${i}-pedra" data-change="pedra" data-i="${i}"${a.pedra ? ' checked' : ''}><span class="box">✓</span>Com pedra</label></div>` : ''}
       ${temGrav(f) ? `<div class="gravs">
         <span class="sub-label" id="lbl-g${i}">Onde gravar</span>
@@ -676,6 +695,8 @@
       const qual = f.aneis.length > 1 ? `da aliança ${i + 1}` : 'da aliança';
       if (!a.de) { e.push(`Preencha o aro atual ${qual}.`); bad.add(`f-a${i}-de`); }
       if (has('troca_aro') && !a.para) { e.push(`Preencha o aro novo ${qual}.`); bad.add(`f-a${i}-para`); }
+      if (erroAro(a, a.de)) { e.push(`Aro atual ${qual}: ${erroAro(a, a.de)}`); bad.add(`f-a${i}-de`); }
+      if (has('troca_aro') && erroAro(a, a.para)) { e.push(`Aro novo ${qual}: ${erroAro(a, a.para)}`); bad.add(`f-a${i}-para`); }
       if (temGrav(f)) a.gravs.forEach((g) => {
         if (!g.texto.trim() && !(g.anexos || []).length) { e.push(`Escreva o texto da gravação ${g.local.toLowerCase()} ${qual} ou anexe o desenho.`); bad.add(`f-a${i}-${g.local}-texto`); }
         if (g.texto.trim() && !g.fonte.trim()) { e.push(`Escreva o nome da fonte da gravação ${g.local.toLowerCase()} ${qual}.`); bad.add(`f-a${i}-${g.local}-fonte-nome`); }
@@ -943,6 +964,14 @@
     if (!el.dataset.bind || !ui.form) return;
     setPath(ui.form, el.dataset.bind, el.value);
     if (ui.invalid.has(el.id)) { ui.invalid.delete(el.id); el.classList.remove('is-invalid'); }
+    const mAro = /^aneis\.(\d+)\.(de|para)$/.exec(el.dataset.bind);
+    if (mAro) {
+      const i = Number(mAro[1]);
+      const a = ui.form.aneis[i];
+      el.classList.toggle('is-invalid', !!erroAro(a, a[mAro[2]]));
+      const box = document.getElementById(`f-a${i}-aro-msg`);
+      if (box) box.innerHTML = msgsAro(a, ui.form.tipos.includes('troca_aro')).map(esc).join('<br>');
+    }
     if (el.tagName === 'TEXTAREA' && el.id.endsWith('-texto')) {
       const cnt = document.getElementById(el.id.replace(/-texto$/, '-cnt'));
       if (cnt) cnt.textContent = contador(el.value);

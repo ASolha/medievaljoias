@@ -360,3 +360,5 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 .boot { min-height: 60vh; display: grid; place-items: center; color: var(--muted); }
 .btn[aria-busy="true"] { opacity: 0.6; pointer-events: none; }
 .anexo .th.enviando { opacity: 0.55; }
+.aro-msg { font-size: 13px; font-weight: 500; color: var(--danger); }
+.aro-msg:empty { display: none; }

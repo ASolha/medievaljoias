@@ -205,8 +205,8 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(to top, var(--bg) 70%, transparent); }
 
 /* Pacotes enviados */
-.search { display: flex; gap: 8px; }
-.search input { flex: 1; }
+.search { display: flex; flex-wrap: wrap; gap: 8px; }
+.search input { flex: 1 1 220px; }
 .lote-card { display: grid; gap: 10px; cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit; }
 .lote-card:hover { border-color: var(--line-strong); }
 .lc-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

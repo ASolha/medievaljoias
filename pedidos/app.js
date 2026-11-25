@@ -9,6 +9,10 @@
   const SUPABASE_URL = 'https://dqiosohjicnruwrhxeou.supabase.co';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxaW9zb2hqaWNucnV3cmh4ZW91Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0OTI0NzcsImV4cCI6MjA4ODA2ODQ3N30.y5LVH3Lb9xDuHLDVvDaNCrzuS2RsJenI0EqgVtHBWfM';
   const BUCKET = 'portal-anexos';
+  // Login por nome de usuário: "giovana" vira giovana@portal.medievaljoias.com.br (e-mail interno, nunca recebe nada)
+  const DOMINIO_USUARIO = 'portal.medievaljoias.com.br';
+  const paraEmail = (v) => { const t = String(v || '').trim().toLowerCase(); return t.includes('@') ? t : (t ? `${t}@${DOMINIO_USUARIO}` : ''); };
+  const usuarioDe = (email) => String(email || '').replace(`@${DOMINIO_USUARIO}`, '');
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'mj-portal-auth' }
   });
@@ -55,7 +59,7 @@
   const nomeSeguro = (n) => String(n || 'arquivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '-').slice(-60);
   function msgErro(e) {
     const m = e?.message || String(e);
-    if (/Invalid login credentials/i.test(m)) return 'E-mail ou senha incorretos.';
+    if (/Invalid login credentials/i.test(m)) return 'Usuário ou senha incorretos.';
     if (/JSON object requested|0 rows|multiple \(or no\) rows/i.test(m)) return 'Não deu para salvar. A Medieval pode já ter recebido esta troca; recarregue a página.';
     if (/Failed to fetch|NetworkError/i.test(m)) return 'Sem conexão com o servidor. Confira a internet e tente de novo.';
     return m;
@@ -301,7 +305,7 @@
   function headerHTML() {
     const n = db.draft.itens.length;
     const emAberto = ui.view === 'aberto' || (ui.view === 'form' && !ui.editLote) || (ui.view === 'imprimir' && ui.print?.origem === 'aberto');
-    const nome = db.cliente?.nome || db.user?.email || '';
+    const nome = db.cliente?.nome || usuarioDe(db.user?.email) || '';
     return `<header class="top"><div class="wrap gutter top-in">
       <div class="brand"><span class="mark">Medieval Joias</span><span class="sub">Trocas</span></div>
       <nav class="tabs" aria-label="Áreas">
@@ -337,7 +341,7 @@
     return `<main class="login gutter"><form class="card login-card" data-form="login">
       <div class="mark">Medieval Joias</div>
       <p class="muted">Portal de trocas</p>
-      <label class="field" for="l-email"><span>E-mail</span><input id="l-email" type="email" autocomplete="username" value="${esc(ui.loginEmail || '')}" required></label>
+      <label class="field" for="l-email"><span>Usuário</span><input id="l-email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Ex.: giovana" value="${esc(ui.loginEmail || '')}" required></label>
       <label class="field" for="l-senha"><span>Senha</span><input id="l-senha" type="password" autocomplete="current-password" required></label>
       <button class="btn accent" type="submit" id="l-entrar">Entrar</button>
       <button class="link" type="button" data-act="esqueci" id="l-esqueci" style="justify-self:center">Esqueci a senha</button>
@@ -494,6 +498,7 @@
       <form class="search" data-form="buscar" role="search">
         <input id="busca" value="${esc(ui.busca)}" placeholder="Código (ex.: TR-0041-02) ou link do QR" aria-label="Buscar por código" autocomplete="off">
         <button class="btn" type="submit" id="btn-buscar">Buscar</button>
+        <button class="btn" type="button" data-act="camera" id="btn-camera" title="Abre a câmera para ler o QR do canhoto">Ler QR com a câmera</button>
       </form>
       ${ui.buscaMsg ? `<div class="flash warn" role="status"><div>${esc(ui.buscaMsg)}</div></div>` : ''}
       ${db.lotes.length ? `<div class="list">${db.lotes.map((l) => `<button class="card lote-card" data-act="lote" data-cod="${l.codigo}" id="lote-${l.codigo}">
@@ -887,6 +892,10 @@
       ir('imprimir', { print: { tipo: 'troca', troca: b.dataset.cod, origem: lote ? 'lote' : 'aberto' } });
     } else if (act === 'imprimir-pacote') abrirImpressaoPacote(b.dataset.cod);
     else if (act === 'imprimir-ja') imprimirJa();
+    else if (act === 'camera') {
+      const lido = typeof window.lerQRCamera === 'function' ? await window.lerQRCamera({ titulo: 'Ler o QR do canhoto' }) : null;
+      if (lido) buscar(lido);
+    }
     else if (act === 'sym') inserirSimbolo(b.dataset.target, b.dataset.c);
     else if (act === 'anexo-remover') {
       const g = ui.form.aneis[Number(b.dataset.i)].gravs.find((x) => x.local === b.dataset.local);
@@ -913,7 +922,7 @@
       const btn = document.getElementById('l-entrar');
       btn.setAttribute('aria-busy', 'true');
       ui.loginEmail = document.getElementById('l-email').value.trim();
-      const { error } = await sb.auth.signInWithPassword({ email: ui.loginEmail, password: document.getElementById('l-senha').value });
+      const { error } = await sb.auth.signInWithPassword({ email: paraEmail(ui.loginEmail), password: document.getElementById('l-senha').value });
       btn.removeAttribute('aria-busy');
       if (error) { ui.flash = { html: esc(msgErro(error)) }; render(); document.getElementById('l-senha')?.focus(); }
     } else if (f.dataset.form === 'nova-senha') {

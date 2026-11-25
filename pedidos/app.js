@@ -478,8 +478,8 @@
             <label><input type="radio" name="f-a${i}-w" id="f-a${i}-w-f" value="Fem." data-change="anel-w" data-i="${i}"${a.w === 'Fem.' ? ' checked' : ''}>Feminina</label>
             <label><input type="radio" name="f-a${i}-w" id="f-a${i}-w-m" value="Masc." data-change="anel-w" data-i="${i}"${a.w === 'Masc.' ? ' checked' : ''}>Masculina</label>
           </div></div>
-        <label class="field" for="f-a${i}-de"><span>Aro atual</span><input id="f-a${i}-de" class="${inv(`f-a${i}-de`)}${erroAro(a, a.de) ? ' is-invalid' : ''}" type="number" inputmode="numeric" step="1" min="${faixaAro(a)[0]}" max="${faixaAro(a)[1]}" data-bind="aneis.${i}.de" value="${a.de ?? ''}"></label>
-        ${has('troca_aro') ? `<label class="field" for="f-a${i}-para"><span>Aro novo <em>(igual = mantém)</em></span><input id="f-a${i}-para" class="${inv(`f-a${i}-para`)}${erroAro(a, a.para) ? ' is-invalid' : ''}" type="number" inputmode="numeric" step="1" min="${faixaAro(a)[0]}" max="${faixaAro(a)[1]}" data-bind="aneis.${i}.para" value="${a.para ?? ''}"></label>` : ''}
+        <label class="field" for="f-a${i}-de"><span>Aro atual</span><input id="f-a${i}-de" class="${inv(`f-a${i}-de`)}${erroAro(a, a.de) ? ' is-invalid' : ''}" type="text" inputmode="numeric" maxlength="4" autocomplete="off" data-bind="aneis.${i}.de" value="${a.de ?? ''}"></label>
+        ${has('troca_aro') ? `<label class="field" for="f-a${i}-para"><span>Aro novo <em>(igual = mantém)</em></span><input id="f-a${i}-para" class="${inv(`f-a${i}-para`)}${erroAro(a, a.para) ? ' is-invalid' : ''}" type="text" inputmode="numeric" maxlength="4" autocomplete="off" data-bind="aneis.${i}.para" value="${a.para ?? ''}"></label>` : ''}
       </div>
       <div class="aro-msg" id="f-a${i}-aro-msg" role="alert">${msgsAro(a, has('troca_aro')).map(esc).join('<br>')}</div>
       <span class="hint">Aros de ${faixaAro(a)[0]} a ${faixaAro(a)[1]}${a.w === 'Fem.' && a.pedra ? ' (com pedra)' : ''}.</span>
@@ -725,7 +725,8 @@
     const a = f.aneis[Number(p[1])];
     if (p[2] === 'gravs') { const g = a.gravs.find((x) => x.local === p[3]); if (g) g[p[4]] = valor; return; }
     if (p[2] === 'modelo' || p[2] === 'modeloNovo') { a[p[2]] = valor; return; }
-    a[p[2]] = valor === '' ? null : Number(valor);
+    const v = String(valor).trim().replace(',', '.');
+    a[p[2]] = v === '' ? null : Number(v);
   }
   function validar(f) {
     const e = [], bad = new Set();
